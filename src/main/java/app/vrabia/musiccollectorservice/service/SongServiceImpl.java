@@ -1,10 +1,14 @@
 package app.vrabia.musiccollectorservice.service;
 
+import app.vrabia.musiccollectorservice.dto.LastListenedSongAtLocationDTO;
+import app.vrabia.musiccollectorservice.dto.LocationDTO;
 import app.vrabia.musiccollectorservice.dto.PagedListenedSongsResponseDTO;
 import app.vrabia.musiccollectorservice.dto.SongDTO;
 import app.vrabia.musiccollectorservice.mapper.SongMapper;
+import app.vrabia.musiccollectorservice.model.LastListenedSongAtLocationModel;
 import app.vrabia.musiccollectorservice.model.ListenedSong;
 import app.vrabia.musiccollectorservice.model.Song;
+import app.vrabia.musiccollectorservice.repository.LastListenedSongAtLocationRepository;
 import app.vrabia.musiccollectorservice.repository.ListenedSongRepository;
 import app.vrabia.musiccollectorservice.repository.SongRepository;
 import jakarta.transaction.Transactional;
@@ -26,6 +30,8 @@ public class SongServiceImpl implements SongService {
     private final ListenedSongRepository listenedSongRepository;
     private final SongRepository songRepository;
     private final SongMapper songMapper;
+    private final LocationService locationService;
+    private final LastListenedSongAtLocationRepository lastListenedSongAtLocationRepository;
     private static final Integer DEFAULT_PAGE_SIZE = 6;
     private static final Integer DEFAULT_PAGE_NUMBER = 0;
     private static final String DEFAULT_SORT_PROPERTY = "lastListenDate";
@@ -45,7 +51,7 @@ public class SongServiceImpl implements SongService {
     }
 
     @Override
-    public String addListenedSong(String songId, String userId) {
+    public ListenedSong addListenedSong(String songId, String userId) {
         Optional<ListenedSong> listenedSong = listenedSongRepository.findByUserIdAndSongId(userId, songId);
         if (listenedSong.isPresent()) {
             // update listened song
@@ -53,7 +59,7 @@ public class SongServiceImpl implements SongService {
             listenedSongToUpdate.setTimesListened(listenedSongToUpdate.getTimesListened() + 1);
             listenedSongToUpdate.setLastListenDate(LocalDateTime.now());
             listenedSongRepository.save(listenedSongToUpdate);
-            return listenedSongToUpdate.getId();
+            return listenedSongToUpdate;
         }
 
         Optional<Song> song = songRepository.findById(songId);
@@ -65,15 +71,16 @@ public class SongServiceImpl implements SongService {
             listenedSongToSave.setTimesListened(1);
             listenedSongToSave.setLastListenDate(LocalDateTime.now());
             ListenedSong savedListenedSong = listenedSongRepository.save(listenedSongToSave);
-            return savedListenedSong.getId();
+            return savedListenedSong;
         }
         return null;
     }
 
     @Override
-    public void listenSong(String userId, SongDTO songDTO) {
+    public void listenSong(String userId, SongDTO songDTO, String ip) {
         String songId = addSong(songDTO);
-        addListenedSong(songId, userId);
+        ListenedSong listenedSong = addListenedSong(songId, userId);
+        addLLastListenedSongAtLocation(listenedSong, ip);
     }
 
     @Override
@@ -100,6 +107,11 @@ public class SongServiceImpl implements SongService {
         return null;
     }
 
+    @Override
+    public List<LastListenedSongAtLocationDTO> getLastListenedSongsAtLocation() {
+        return songMapper.lastListenedSongAtLocationModelsToLastListenedSongAtLocationDTOs(lastListenedSongAtLocationRepository.findAll());
+    }
+
     private Pageable buildPageRequest(Integer page, Integer pageSize) {
         Integer actualPage = page == null ? DEFAULT_PAGE_NUMBER : page;
         Integer actualPageSize = pageSize == null ? DEFAULT_PAGE_SIZE : pageSize;
@@ -114,5 +126,14 @@ public class SongServiceImpl implements SongService {
         pagedListenedSongsResponseDTO.setTotalSongs(pagedResult.getTotalElements());
         pagedListenedSongsResponseDTO.setCurrentPage(pagedResult.getNumber());
         return pagedListenedSongsResponseDTO;
+    }
+
+    private void addLLastListenedSongAtLocation(ListenedSong listenedSong, String ip) {
+        LocationDTO locationDTO = locationService.getLocation(ip);
+        LastListenedSongAtLocationModel lastListenedSongAtLocationModel = songMapper.listenedSongAndLocationToLastListenedSongAtLocationModel(listenedSong, locationDTO);
+        lastListenedSongAtLocationModel.setListenedAt(LocalDateTime.now());
+        Optional<LastListenedSongAtLocationModel> existingLastListenedSongAtLocationModel = lastListenedSongAtLocationRepository.findByUserId(listenedSong.getUserId());
+        existingLastListenedSongAtLocationModel.ifPresent(lastListenedSongAtLocationRepository::delete);
+        lastListenedSongAtLocationRepository.save(lastListenedSongAtLocationModel);
     }
 }

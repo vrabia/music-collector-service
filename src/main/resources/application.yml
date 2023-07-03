@@ -49,3 +49,6 @@ jwt:
   issuer: ${JWT_ISSUER}
   secret: ${JWT_SECRET}
 
+geolocation:
+  url: ${GEOLOCATION_API_URL}
+  api-key: ${GEOLOCATION_API_KEY}
