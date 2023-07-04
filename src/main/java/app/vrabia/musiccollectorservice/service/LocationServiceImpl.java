@@ -31,6 +31,7 @@ public class LocationServiceImpl implements LocationService {
         log.info("Get location for ip: {}", ip);
         String url = geolocationUrl + "?api_key=" + geolocationApiKey;
         if (ip != null) {
+            ip = ip.split(",")[0].trim();
             url += "&ip_address=" + ip;
         }
 
